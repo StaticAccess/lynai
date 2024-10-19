@@ -1,4 +1,3 @@
- 
 'use client'
 
 import React, { useState, useEffect, useRef } from 'react'
@@ -14,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { useToast } from "@/hooks/use-toast"
 import { generateRandomUsername } from '@/lib/utils'
-import { getMessages, sendMessage, changeUsername, setDeleteTimer, downloadChat } from '@/lib/api'
+import { getMessages, sendMessage, changeUsername, setDeleteTimer, downloadChat, createWebSocketConnection, sendWebSocketMessage } from '@/lib/api'
 
 type Message = {
   id: string
@@ -34,24 +33,54 @@ export default function ChatRoom({ params }: { params: { roomId: string } }) {
   const { toast } = useToast()
 
   useEffect(() => {
+    const ws = createWebSocketConnection(params.roomId);
+    let isActive = true;
+
+    ws.onopen = () => {
+      console.log('WebSocket connection established');
+    };
+
+    ws.onmessage = (event) => {
+      if (isActive) {
+        const data = JSON.parse(event.data);
+        setMessages((prevMessages) => [...prevMessages, {
+          id: Date.now().toString(),
+          username: data.username,
+          content: data.message,
+          timestamp: new Date(),
+        }]);
+      }
+    };
+
+    ws.onerror = (error) => {
+      console.error('WebSocket error:', error);
+      toast({
+        title: "Error",
+        description: "Failed to connect to chat room",
+        variant: "destructive",
+      });
+    };
+
     const fetchMessages = async () => {
-      const result = await getMessages(params.roomId)
+      const result = await getMessages(params.roomId);
       if (result.success) {
-        setMessages(result.messages)
+        setMessages(result.messages);
       } else {
         toast({
           title: "Error",
           description: "Failed to fetch messages",
           variant: "destructive",
-        })
+        });
       }
-    }
+    };
 
-    fetchMessages()
-    const intervalId = setInterval(fetchMessages, 5000)
+    fetchMessages();
 
-    return () => clearInterval(intervalId)
-  }, [params.roomId, toast])
+    return () => {
+      isActive = false;
+      ws.close();
+    };
+  }, [params.roomId, toast]);
 
   useEffect(() => {
     if (timeLimit && timeLimit !== 'after') {
@@ -64,7 +93,7 @@ export default function ChatRoom({ params }: { params: { roomId: string } }) {
         setRemainingTime((prev) => {
           if (prev === null || prev <= 0) {
             clearInterval(interval)
-            router.push('/').catch(console.error)
+            void router.push('/')
             return null
           }
           return prev - 1
@@ -79,21 +108,16 @@ export default function ChatRoom({ params }: { params: { roomId: string } }) {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
-  const handleSendMessage = async (e: React.FormEvent) => {
-    e.preventDefault()
+  const handleSendMessage = (e: React.FormEvent) => {
+    e.preventDefault();
     if (inputMessage.trim()) {
-      const result = await sendMessage(params.roomId, inputMessage, username)
-      if (result.success) {
-        setInputMessage('')
-      } else {
-        toast({
-          title: "Error",
-          description: "Failed to send message",
-          variant: "destructive",
-        })
-      }
+      const ws = createWebSocketConnection(params.roomId);
+      ws.onopen = () => {
+        sendWebSocketMessage(ws, username, inputMessage);
+        setInputMessage('');
+      };
     }
-  }
+  };
 
   const handleUsernameChange = async (newUsername: string) => {
     if (newUsername) {

@@ -87,3 +87,11 @@ export const downloadChat = async (roomId: string, format: 'txt' | 'json') => {
     return { success: false, error: 'Failed to download chat' }
   }
 }
+
+export const createWebSocketConnection = (roomId: string) => {
+  return new WebSocket(`ws://127.0.0.1:8000/ws/${roomId}`);
+};
+
+export const sendWebSocketMessage = (ws: WebSocket, username: string, message: string) => {
+  ws.send(JSON.stringify({ username, message }));
+};

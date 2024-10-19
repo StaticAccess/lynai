@@ -4,6 +4,10 @@ from pydantic import BaseModel
 from uuid import uuid4
 from passlib.context import CryptContext
 from fastapi.middleware.cors import CORSMiddleware
+from utils import generate_random_username
+from routers import ws
+import db
+
 
 from db import Room, SessionLocal, engine
 
@@ -16,15 +20,12 @@ app.add_middleware(
     allow_methods=["*"],  # ["GET", "POST"] if you want to restrict
     allow_headers=["*"],  # ["Authorization", "Content-Type"] if you want to restrict
 )
-
+app.include_router(ws.router)
 # Create a database session
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
-
+get_db = db.get_db
+@app.on_event("startup")
+async def startup_event():
+    app.state.ws_manager = ws.ConnectionManager()
 # Password encryption context
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
