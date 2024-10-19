@@ -1,14 +1,14 @@
 import axios from 'axios'
 
 const api = axios.create({
-  baseURL: '/api',
-  withCredentials: true,
+  baseURL: 'http://127.0.0.1:8000',  
+  withCredentials: false,
 })
 
 export const createChatRoom = async (password: string) => {
   try {
     const response = await api.post('/create-room', { password })
-    return response.data
+    return {success: true, roomId: response.data.roomId}
   } catch (error) {
     console.error('Error creating chat room:', error)
     return { success: false, error: 'Failed to create chat room' }
@@ -21,6 +21,9 @@ export const joinChatRoom = async (roomId: string, password: string) => {
     return response.data
   } catch (error) {
     console.error('Error joining chat room:', error)
+    if (axios.isAxiosError(error) && error.response) {
+      return error.response.data
+    }
     return { success: false, error: 'Failed to join chat room' }
   }
 }

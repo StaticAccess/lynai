@@ -2,18 +2,21 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { MessageCircle } from 'lucide-react'
+import { MessageCircle, Copy, Check } from 'lucide-react'
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useToast } from "@/hooks/use-toast"
 import { createChatRoom, joinChatRoom } from '@/lib/api'
+import { Toaster } from "@/components/ui/toaster"
 
 export default function Home() {
   const [createPassword, setCreatePassword] = useState('')
   const [joinLink, setJoinLink] = useState('')
   const [joinPassword, setJoinPassword] = useState('')
+  const [generatedLink, setGeneratedLink] = useState('')
+  const [copied, setCopied] = useState(false)
   const router = useRouter()
   const { toast } = useToast()
 
@@ -22,7 +25,12 @@ export default function Home() {
     if (createPassword) {
       const result = await createChatRoom(createPassword)
       if (result.success) {
-        router.push(`/chat-room/${result.roomId}`)
+        const fullLink = `${window.location.origin}/chat-room/${result.roomId}`
+        setGeneratedLink(fullLink)
+        toast({
+          title: "Room Created",
+          description: "Your chat room has been successfully created.",
+        })
       } else {
         toast({
           title: "Error",
@@ -36,17 +44,48 @@ export default function Home() {
   const handleJoinRoom = async (e: React.FormEvent) => {
     e.preventDefault()
     if (joinLink && joinPassword) {
-      const result = await joinChatRoom(joinLink, joinPassword)
-      if (result.success) {
-        router.push(`/chat-room/${joinLink}`)
-      } else {
+      try {
+        // Extract the room ID from the join link
+        const roomId = joinLink.split('/').pop()
+        if (!roomId) {
+          throw new Error('Invalid chat link')
+        }
+
+        const result = await joinChatRoom(roomId, joinPassword)
+        if (result.success) {
+          toast({
+            title: "Success",
+            description: "Joined chat room successfully",
+            variant: "default",
+          })
+          router.push(`/chat-room/${roomId}`)
+        } else {
+          throw new Error(result.error || 'Failed to join chat room')
+        }
+      } catch (error) {
         toast({
           title: "Error",
-          description: "Failed to join chat room",
+          description: error instanceof Error ? error.message : "Failed to join chat room",
           variant: "destructive",
         })
       }
+    } else {
+      toast({
+        title: "Error",
+        description: "Please enter both chat link and password",
+        variant: "destructive",
+      })
     }
+  }
+
+  const copyToClipboard = () => {
+    navigator.clipboard.writeText(generatedLink)
+    setCopied(true)
+    toast({
+      title: "Copied",
+      description: "Link copied to clipboard",
+    })
+    setTimeout(() => setCopied(false), 2000)
   }
 
   return (
@@ -86,6 +125,27 @@ export default function Home() {
                     Generate Chat Link
                   </Button>
                 </form>
+                {generatedLink && (
+                  <div className="mt-4 space-y-4">
+                    <div className="flex items-center space-x-2">
+                      <Input
+                        type="text"
+                        value={generatedLink}
+                        readOnly
+                        className="w-full"
+                      />
+                      <Button onClick={copyToClipboard} variant="outline" size="icon">
+                        {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                      </Button>
+                    </div>
+                    <Button 
+                      onClick={() => router.push(generatedLink)}
+                      className="w-full bg-gradient-to-r from-green-500 to-blue-500 hover:from-green-600 hover:to-blue-600"
+                    >
+                      Join Chat Room
+                    </Button>
+                  </div>
+                )}
               </TabsContent>
               <TabsContent value="join">
                 <h2 className="text-2xl font-bold mb-2">Join a Chat</h2>
@@ -114,6 +174,7 @@ export default function Home() {
           </Tabs>
         </Card>
       </main>
+      <Toaster />
     </div>
   )
 }
