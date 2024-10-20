@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
-import { Clock, Download, Edit2, Send, X, ChevronDown, User, Shuffle } from 'lucide-react'
+import { Clock, Download, Edit2, Send, X, ChevronDown, User, Shuffle, Smile, Image } from 'lucide-react'
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -13,14 +13,17 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { useToast } from "@/hooks/use-toast"
 import { generateRandomUsername } from '@/lib/utils'
-import { getMessages, sendMessage, changeUsername, setDeleteTimer, downloadChat, createWebSocketConnection, sendWebSocketMessage } from '@/lib/api'
+import { changeUsername, setDeleteTimer, downloadChat, createWebSocketConnection, sendWebSocketMessage } from '@/lib/api'
 
 type Message = {
   id: string
   username: string
   content: string
   timestamp: Date
+  type: 'text' | 'emoji'
 }
+
+const emojis = ['😀', '😂', '😍', '🤔', '👍', '👎', '🎉', '🔥', '❤️', '😎']
 
 export default function ChatRoom({ params }: { params: { roomId: string } }) {
   const [messages, setMessages] = useState<Message[]>([])
@@ -31,16 +34,17 @@ export default function ChatRoom({ params }: { params: { roomId: string } }) {
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const router = useRouter()
   const { toast } = useToast()
+  const wsRef = useRef<WebSocket | null>(null)
 
   useEffect(() => {
-    const ws = createWebSocketConnection(params.roomId);
+    wsRef.current = createWebSocketConnection(params.roomId);
     let isActive = true;
 
-    ws.onopen = () => {
+    wsRef.current.onopen = () => {
       console.log('WebSocket connection established');
     };
 
-    ws.onmessage = (event) => {
+    wsRef.current.onmessage = (event) => {
       if (isActive) {
         const data = JSON.parse(event.data);
         setMessages((prevMessages) => [...prevMessages, {
@@ -48,11 +52,12 @@ export default function ChatRoom({ params }: { params: { roomId: string } }) {
           username: data.username,
           content: data.message,
           timestamp: new Date(),
+          type: data.type || 'text',
         }]);
       }
     };
 
-    ws.onerror = (error) => {
+    wsRef.current.onerror = (error) => {
       console.error('WebSocket error:', error);
       toast({
         title: "Error",
@@ -61,24 +66,11 @@ export default function ChatRoom({ params }: { params: { roomId: string } }) {
       });
     };
 
-    const fetchMessages = async () => {
-      const result = await getMessages(params.roomId);
-      if (result.success) {
-        setMessages(result.messages);
-      } else {
-        toast({
-          title: "Error",
-          description: "Failed to fetch messages",
-          variant: "destructive",
-        });
-      }
-    };
-
-    fetchMessages();
-
     return () => {
       isActive = false;
-      ws.close();
+      if (wsRef.current) {
+        wsRef.current.close();
+      }
     };
   }, [params.roomId, toast]);
 
@@ -110,12 +102,19 @@ export default function ChatRoom({ params }: { params: { roomId: string } }) {
 
   const handleSendMessage = (e: React.FormEvent) => {
     e.preventDefault();
-    if (inputMessage.trim()) {
-      const ws = createWebSocketConnection(params.roomId);
-      ws.onopen = () => {
-        sendWebSocketMessage(ws, username, inputMessage);
-        setInputMessage('');
-      };
+    const trimmedMessage = inputMessage.trim();
+    if (trimmedMessage && wsRef.current) {
+      sendWebSocketMessage(wsRef.current, username, trimmedMessage);
+      setInputMessage('');
+      // Reset the textarea height
+      const textarea = e.target as HTMLTextAreaElement;
+      textarea.style.height = 'auto';
+    }
+  };
+
+  const handleSendEmoji = (emoji: string) => {
+    if (wsRef.current) {
+      sendWebSocketMessage(wsRef.current, username, emoji, 'emoji');
     }
   };
 
@@ -182,6 +181,18 @@ export default function ChatRoom({ params }: { params: { roomId: string } }) {
     handleUsernameChange(newUsername)
   }
 
+  useEffect(() => {
+    const textarea = document.querySelector('textarea');
+    if (textarea) {
+      const adjustHeight = () => {
+        textarea.style.height = 'auto';
+        textarea.style.height = `${textarea.scrollHeight}px`;
+      };
+      textarea.addEventListener('input', adjustHeight);
+      return () => textarea.removeEventListener('input', adjustHeight);
+    }
+  }, []);
+
   return (
     <Card className="w-full max-w-4xl mx-auto h-[calc(100vh-2rem)] my-4 flex flex-col">
       <CardHeader className="flex flex-row items-center justify-between p-4 border-b">
@@ -230,11 +241,15 @@ export default function ChatRoom({ params }: { params: { roomId: string } }) {
               <Avatar className="w-8 h-8">
                 <AvatarFallback>{msg.username[0]}</AvatarFallback>
               </Avatar>
-              <div className={`max-w-xs ${
+              <div className={`max-w-[70%] ${
                 msg.username === username ? 'bg-primary text-primary-foreground' : 'bg-muted'
-              } rounded-lg p-3`}>
+              } rounded-lg p-3 break-words`}>
                 <p className="font-semibold text-sm">{msg.username}</p>
-                <p>{msg.content}</p>
+                {msg.type === 'emoji' ? (
+                  <p className="text-4xl">{msg.content}</p>
+                ) : (
+                  <p className="whitespace-pre-wrap break-all">{msg.content}</p>
+                )}
                 <p className="text-xs opacity-75 mt-1">{new Date(msg.timestamp).toLocaleTimeString()}</p>
               </div>
             </div>
@@ -269,7 +284,6 @@ export default function ChatRoom({ params }: { params: { roomId: string } }) {
                   <Button variant="outline" size="icon">
                     <Download size={16} />
                   </Button>
-                
                 </PopoverTrigger>
                 <PopoverContent className="w-40">
                   <div className="grid gap-2">
@@ -285,13 +299,40 @@ export default function ChatRoom({ params }: { params: { roomId: string } }) {
             </div>
           </div>
           <form onSubmit={handleSendMessage} className="flex space-x-2">
-            <Input
-              type="text"
+            <textarea
               value={inputMessage}
               onChange={(e) => setInputMessage(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSendMessage(e);
+                }
+              }}
               placeholder="Type your message..."
-              className="flex-grow"
+              className="flex-grow resize-none border rounded-md p-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              rows={1}
             />
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button type="button" variant="outline">
+                  <Smile size={16} />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-64">
+                <div className="grid grid-cols-5 gap-2">
+                  {emojis.map((emoji) => (
+                    <Button
+                      key={emoji}
+                      variant="ghost"
+                      className="text-2xl"
+                      onClick={() => handleSendEmoji(emoji)}
+                    >
+                      {emoji}
+                    </Button>
+                  ))}
+                </div>
+              </PopoverContent>
+            </Popover>
             <Button type="submit">
               <Send size={16} className="mr-2" />
               <span className="hidden md:inline">Send</span>

@@ -28,25 +28,7 @@ export const joinChatRoom = async (roomId: string, password: string) => {
   }
 }
 
-export const getMessages = async (roomId: string) => {
-  try {
-    const response = await api.get(`/messages/${roomId}`)
-    return response.data
-  } catch (error) {
-    console.error('Error getting messages:', error)
-    return { success: false, error: 'Failed to get messages' }
-  }
-}
 
-export const sendMessage = async (roomId: string, content: string, username: string) => {
-  try {
-    const response = await api.post(`/messages/${roomId}`, { content, username })
-    return response.data
-  } catch (error) {
-    console.error('Error sending message:', error)
-    return { success: false, error: 'Failed to send message' }
-  }
-}
 
 export const changeUsername = async (roomId: string, newUsername: string) => {
   try {
@@ -92,6 +74,6 @@ export const createWebSocketConnection = (roomId: string) => {
   return new WebSocket(`ws://127.0.0.1:8000/ws/${roomId}`);
 };
 
-export const sendWebSocketMessage = (ws: WebSocket, username: string, message: string) => {
-  ws.send(JSON.stringify({ username, message }));
+export const sendWebSocketMessage = (ws: WebSocket, username: string, message: string, type: 'text' | 'emoji' = 'text') => {
+  ws.send(JSON.stringify({ username, message, type }));
 };
