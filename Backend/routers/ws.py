@@ -1,9 +1,8 @@
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends
-from sqlalchemy.orm import Session
-from db import get_db
-import models
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 import json
-
+import os
+import sqlite3
+from datetime import datetime
 
 router = APIRouter()
 
@@ -24,8 +23,19 @@ class ConnectionManager:
         for connection in self.active_connections[room_id]:
             await connection.send_text(message)
 
+def get_temp_db_connection(room_id: str):
+    db_file = f"chat_rooms/{room_id}.db"
+    os.makedirs(os.path.dirname(db_file), exist_ok=True)
+    conn = sqlite3.connect(db_file)
+    conn.execute('''CREATE TABLE IF NOT EXISTS messages
+                    (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                     username TEXT,
+                     content TEXT,
+                     timestamp DATETIME)''')
+    return conn
+
 @router.websocket("/ws/{room_id}")
-async def websocket_endpoint(websocket: WebSocket, room_id: str, db: Session = Depends(get_db)):
+async def websocket_endpoint(websocket: WebSocket, room_id: str):
     manager = websocket.app.state.ws_manager
     await manager.connect(websocket, room_id)
     try:
@@ -33,10 +43,14 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, db: Session = D
             data = await websocket.receive_text()
             message_data = json.loads(data)
             
-            # Store message in the database
-            db_message = models.Message(room_id=room_id, username=message_data['username'], content=message_data['message'])
-            db.add(db_message)
-            db.commit()
+            # Store message in the temporary database
+            conn = get_temp_db_connection(room_id)
+            cursor = conn.cursor()
+            cursor.execute('''INSERT INTO messages (username, content, timestamp)
+                              VALUES (?, ?, ?)''',
+                           (message_data['username'], message_data['message'], datetime.now()))
+            conn.commit()
+            conn.close()
             
             # Broadcast the message
             await manager.broadcast(data, room_id)

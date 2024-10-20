@@ -52,7 +52,7 @@ export const setDeleteTimer = async (roomId: string, duration: string) => {
 
 export const downloadChat = async (roomId: string, format: 'txt' | 'json') => {
   try {
-    const response = await api.get(`/download-chat/${roomId}`, {
+    const response = await api.get(`/database/download-chat/${roomId}`, {
       params: { format },
       responseType: 'blob',
     })
@@ -76,4 +76,35 @@ export const createWebSocketConnection = (roomId: string) => {
 
 export const sendWebSocketMessage = (ws: WebSocket, username: string, message: string, type: 'text' | 'emoji' = 'text') => {
   ws.send(JSON.stringify({ username, message, type }));
+};
+
+export const importDatabase = async (file: File) => {
+  try {
+    const formData = new FormData();
+    formData.append('file', file);
+    const response = await api.post('/database/import-database', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return response.data;
+  } catch (error) {
+    console.error('Error importing database:', error);
+    return { success: false, error: 'Failed to import database' };
+  }
+};
+
+export const getDatabase = async (roomId: string) => {
+  try {
+    const response = await api.get(`/database/get-database/${roomId}`, { responseType: 'blob' });
+    const url = window.URL.createObjectURL(new Blob([response.data]));
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `chat_room_${roomId}.db`);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    return { success: true };
+  } catch (error) {
+    console.error('Error getting database:', error);
+    return { success: false, error: 'Failed to get database' };
+  }
 };

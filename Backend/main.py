@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from utils import generate_random_username
 from routers import ws
 import db
-
+from routers import database_operations
 
 from db import Room, SessionLocal, engine
 
@@ -21,6 +21,8 @@ app.add_middleware(
     allow_headers=["*"],  # ["Authorization", "Content-Type"] if you want to restrict
 )
 app.include_router(ws.router)
+app.include_router(database_operations.router, prefix="/database")
+
 # Create a database session
 get_db = db.get_db
 @app.on_event("startup")
