@@ -17,8 +17,10 @@
         "name": "next"
       }
     ],
+    "baseUrl": ".", // Adjust this if necessary
     "paths": {
-      "@/*": ["./*"]
+	"@/components/*": ["components/*"]
+ // Adjust based on your project structure
     }
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
