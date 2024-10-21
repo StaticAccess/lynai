@@ -2,8 +2,9 @@
 
 import React, { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
+import { User } from 'lucide-react'; // Keeping only this import for User
 import { motion } from 'framer-motion'
-import { Clock, Download, Edit2, Send, X, ChevronDown, User, Shuffle, Smile, Image } from 'lucide-react'
+import { Clock, Download, Edit2, Send, X, ChevronDown, Shuffle, Smile, Image } from 'lucide-react' // Removed the second User import
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
